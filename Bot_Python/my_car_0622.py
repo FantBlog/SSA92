@@ -305,7 +305,7 @@ class DrivingClient(DrivingController):
             target_angle = _required_angle(proximate_dist, sensing_info.to_middle, target_pos)
             # target_angle = (target_angle + sensing_info.track_forward_angles[0])/2
             next_angle = self.PID_controller(sensing_info.moving_angle, target_angle , 'cornering', factor=1, kP=1, kI=1, kD=0.1)
-            t_ang = 1 * min(1, sensing_info.speed/100) * (target_angle) / (steer_factor + 0.001)
+            t_ang = 1.3 * min(1, sensing_info.speed/100) * (target_angle) / (steer_factor + 0.001)
 
             set_steering += t_ang
 
@@ -363,18 +363,18 @@ class DrivingClient(DrivingController):
 
         ## 전방 커브의 각도가 큰 경우 속도를 제어함
         ## 차량 핸들 조정을 위해 참고하는 커브 보다 조금 더 멀리 참고하여 미리 속도를 줄임
-        road_range = int(sensing_info.speed / 20)
-        for i in range(0, road_range):
-            fwd_angle = abs(sensing_info.track_forward_angles[i])
-            if fwd_angle > 30:  ## 커브가 45도 이상인 경우 brake, throttle 을 제어
-                full_throttle = False
-            if fwd_angle > 70:  ## 커브가 80도 이상인 경우 steering 까지 추가로 제어
-                emergency_brake = True
-                break
+        # road_range = int(sensing_info.speed / 20)
+        # for i in range(0, road_range):
+        #     fwd_angle = abs(sensing_info.track_forward_angles[i])
+        #     if fwd_angle > 30:  ## 커브가 45도 이상인 경우 brake, throttle 을 제어
+        #         full_throttle = False
+        #     if fwd_angle > 70:  ## 커브가 80도 이상인 경우 steering 까지 추가로 제어
+        #         emergency_brake = True
+        #         break
 
         ## brake, throttle 제어
 
-        set_brake = 0.0
+        # set_brake = 0.0
         # if full_throttle == False:
         #     # print(sensing_info.moving_angle)
         #     set_brake = min(0.35 + map_value(abs(sensing_info.moving_angle), 0, 50, 0, 1), 1)
@@ -386,28 +386,66 @@ class DrivingClient(DrivingController):
         #     if sensing_info.speed > 130:
         #         set_throttle = 0.5
         #         set_brake = 0.7
-        if emergency_brake:
-            if set_steering > 0:
-                set_steering += 0.3
-            else:
-                set_steering -= 0.3
-            set_brake = 0.6
+        # if emergency_brake:
+        #     if set_steering > 0:
+        #         set_steering += 0.3
+        #     else:
+        #         set_steering -= 0.3
+        #     set_brake = 0.6
             # set_throttle = 0.2
 
 
-        if sensing_info.speed > 120 and len(sensing_info.track_forward_obstacles[:8]) > 0:
-            print("장애물!")
-            if sensing_info.speed > 135:
+        # if sensing_info.speed > 120 and len(sensing_info.track_forward_obstacles[:8]) > 0:
+        #     print("장애물!")
+        #     if sensing_info.speed > 135:
+        #         set_brake = 0.5
+        #         # set_throttle = 0.7
+        #     # elif sensing_info.speed > 120:
+        #         # set_brake = 0.4
+        #         # set_throttle = 0.7
+        #     else:
+        #         set_brake = 0.4
+        #     set_throttle = 0.7
+        
+        # 커브각이 클때 쓰로틀 브레이크 설정
+        set_throttle = 1.0
+        set_brake = 0.0
+
+        full_throttle = True
+        road_range = int(sensing_info.speed / 12)
+        max_angle = 0
+        for i in range(0, road_range):
+            fwd_angle = abs(sensing_info.track_forward_angles[i])
+            max_angle = max(max_angle, fwd_angle)
+            if fwd_angle > 40:  ## 커브가 45도 이상인 경우 brake, throttle 을 제어
+                full_throttle = False
+                self.is_last_corner = 3
+
+        ## brake, throttle 제어
+        if full_throttle == False:
+            target_speed = map_value(max_angle, 0, 90, 180, 50)
+            if sensing_info.speed - target_speed >= 50:
+                set_throttle = map_value(sensing_info.speed - target_speed, 50, 160, 1, 0)
+                print(f"curve brake on [set_throttle :{set_throttle}]")
+            set_brake = map_value(sensing_info.speed - target_speed, 0, 160, 0, 1)
+            print(f"curve brake on [set_brake : {set_brake}]")
+            
+        # print(sensing_info.track_forward_obstacles)
+        if len(sensing_info.track_forward_obstacles) > 0 and sensing_info.track_forward_obstacles[0]['dist'] <= 80 and sensing_info.speed > 120:
+            print("장애물!", sensing_info.track_forward_obstacles[0]['dist'])
+            mid_dis = abs(sensing_info.track_forward_obstacles[0]['to_middle'] - sensing_info.to_middle)
+            if mid_dis < 3:
+                print("감속", mid_dis)
+                # if sensing_info.speed > 135:
+                #     set_brake = 0.5
+                    # set_throttle = 0.7
+                # elif sensing_info.speed > 120:
+                    # set_brake = 0.4
+                    # set_throttle = 0.7
+                # else:
                 set_brake = 0.5
-                # set_throttle = 0.7
-            # elif sensing_info.speed > 120:
-                # set_brake = 0.4
-                # set_throttle = 0.7
-            else:
-                set_brake = 0.4
-            set_throttle = 0.7
-                
-                
+                set_throttle = 0.5
+        
         # 충돌확인
         if sensing_info.lap_progress > 0.5 and -1 < sensing_info.speed < 1 and not self.is_accident:
             self.accident_count += 1
@@ -450,7 +488,7 @@ class DrivingClient(DrivingController):
 
         # 다시 진행
         # 도로 밖에서 후진해올때 도로 중앙근처로 오면 바로 다시시작
-        if self.recovery_count >= self.back_dis or (self.back_dis > 15 and abs(sensing_info.to_middle) < 3):
+        if self.recovery_count >= self.back_dis or (self.back_dis > 16 and abs(sensing_info.to_middle) < 3):
             # print("다시시작", self.recovery_count)
             # print("후진 길이", self.back_dis)
             self.is_accident = False
@@ -519,7 +557,6 @@ class DrivingClient(DrivingController):
             # print("역주행 수정")
             set_steering = self.reverse_steer
             set_throttle = 0.7
-
 
 
         # Moving straight forward
@@ -670,7 +707,7 @@ def local_path_planning(car_speed, car_yaw, car_pos, forward_map, half_road_widt
             
             ## 직선주행 중일 경우, 장애물에 대한 가중치를 높게봄
             if abs(car_yaw) < 5:  
-                weight_of_obstacle *= 1.3
+                weight_of_obstacle *= 1.5
     
             
             # print((car_position - idx)* 0.1, "m")
