@@ -200,14 +200,15 @@ class DrivingClient(DrivingController):
         # print(sensing_info.track_forward_obstacles)
         if len(sensing_info.track_forward_obstacles) > 0 and sensing_info.track_forward_obstacles[0]['dist'] <= 90 and sensing_info.speed >= 120:
             # print("장애물!", sensing_info.track_forward_obstacles[0]['dist'])
-            target_speed = map_value(sensing_info.track_forward_obstacles[0]['dist'], 0, 90, 180, 50)
-            set_brake = map_value(sensing_info.speed - target_speed, 0, 160, 0, 1)
-            
+            # target_speed = map_value(sensing_info.track_forward_obstacles[0]['dist'], 0, 90, 180, 50)
+            # set_brake = map_value(sensing_info.speed - target_speed, 0, 160, 0, 1)
+            set_brake = 0.25
             for i in range(len(sensing_info.track_forward_obstacles)):
                 mid_dis = abs(sensing_info.track_forward_obstacles[i]['to_middle'] - sensing_info.to_middle)
                 if mid_dis < 3:
                     # print("감속", mid_dis)
-                    set_brake = 0.7
+                    target_speed = map_value(sensing_info.track_forward_obstacles[0]['dist'], 0, 90, 180, 50)
+                    set_brake = map_value(sensing_info.speed - target_speed, 0, 160, 0, 1)
                     set_throttle = 0
                     
             
